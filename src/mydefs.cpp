@@ -134,7 +134,6 @@ bool validate_utf8(const char* str, bool restrict_to_two_bytes) noexcept {
   constexpr uint8_t UTF8_CONTINUATION_MASK = 0xC0;
   constexpr uint8_t UTF8_CONTINUATION_PREFIX = 0x80;
 
-  // bool has_two_byte = false;
   const auto* p = reinterpret_cast<const unsigned char*>(str);
 
   while (*p) {
@@ -146,12 +145,6 @@ bool validate_utf8(const char* str, bool restrict_to_two_bytes) noexcept {
       continue;
     }
 
-    // Detect standalone high bytes (0x80-0xFF), common in Windows-1252
-    if (c >= 0x80 && (c < 0xC2 || (c & UTF8_2BYTE_MASK) != UTF8_2BYTE_PREFIX) && (c & UTF8_3BYTE_MASK) != UTF8_3BYTE_PREFIX &&
-        (c & UTF8_4BYTE_MASK) != UTF8_4BYTE_PREFIX) {
-      return false;  // Invalid UTF-8 start byte, likely ANSI
-    }
-
     // 2-byte sequence (U+0080 - U+07FF)
     if ((c & UTF8_2BYTE_MASK) == UTF8_2BYTE_PREFIX) {
       if (c < 0xC2 || !p[1]) {
@@ -159,18 +152,8 @@ bool validate_utf8(const char* str, bool restrict_to_two_bytes) noexcept {
       }
       uint8_t c1 = p[1];
       if ((c1 & UTF8_CONTINUATION_MASK) != UTF8_CONTINUATION_PREFIX) {
-        // Check for ANSI-like second byte (0x40-0x7F), common in GBK/Shift-JIS
-        if (c1 >= 0x40 && c1 <= 0x7F) {
-          return false;  // Likely GBK or Shift-JIS, not UTF-8
-        }
         return false;  // Invalid continuation byte
       }
-      // Decode and check code point to exclude rare ranges
-      uint32_t code_point = ((c & 0x1F) << 6) | (c1 & 0x3F);
-      if (code_point < 0x80 || code_point > 0x7FF || (code_point >= 0x0080 && code_point <= 0x05FF)) {
-        return false;  // Invalid or rare code point, likely ANSI
-      }
-      // has_two_byte = true;
       p += 2;
       continue;
     }
@@ -465,6 +448,24 @@ bool HasFileExt(std::string fn, std::string ext) {
   return (fn.substr(fn.find_last_of(".")) == ext);
 }
 
+/// Returns true if the extension pattern contains '*' or '?' wildcards
+/// Use this to decide whether wildcard based matching is required
+bool HasFileExtWildcard(const std::string& ext) {
+  return ext.find('*') != std::string::npos || ext.find('?') != std::string::npos;
+}
+
+/// Matches a string against a wildcard pattern supporting '*' and '?'
+/// Use this only when wildcard characters are present in the extension
+bool wildcardMatch(const char* pattern, const char* str) {
+  if (*pattern == '\0') return *str == '\0';
+
+  if (*pattern == '*') return wildcardMatch(pattern + 1, str) || (*str && wildcardMatch(pattern, str + 1));
+
+  if (*pattern == '?' || *pattern == *str) return wildcardMatch(pattern + 1, str + 1);
+
+  return false;
+}
+
 // replace file extension of input_file with new extension (with or without leading '.')
 std::string FileExtSet(std::string fn_in, std::string ext_new) {
   if (!ext_new.empty() && (ext_new[0] != '.')) ext_new = '.' + ext_new;
@@ -487,6 +488,21 @@ std::string getFileExtension(const char* filepath) {
   // Optional: in lowercase letters
   for (char& c : ext) c = std::tolower(static_cast<unsigned char>(c));
   return ext;
+}
+
+/// Compares a file extension with an extension pattern, supporting both strict and wildcard matching
+/// Use this to compare extensions, where the extension pattern may contain '*' or '?'
+bool matchExtension(const std::string& filename, std::string ext) {
+  if (ext.empty()) return true;
+
+  // extract extension from filename
+  std::string fileExt = getFileExtension(filename.c_str());
+
+  if (HasFileExtWildcard(ext)) {
+    return wildcardMatch(ext.c_str(), fileExt.c_str());
+  } else {
+    return HasFileExt(fileExt, ext);
+  }
 }
 
 // checks if given file is a las/laz file
@@ -693,7 +709,7 @@ std::string trim(const std::string& in) {
   size_t i = 0;
   while (i < in.length() && (in[i] == ' ' || in[i] == '\n' || in[i] == '\t' || in[i] == '\r' || in[i] == '\f' || in[i] == '\v')) i++;
   size_t j = in.length() - 1;
-  while (j > 0 && (in[j] == ' ' || in[j] == '\n' || in[j] == '\t' || in[i] == '\r' || in[i] == '\f' || in[i] == '\v')) j--;
+  while (j > 0 && (in[j] == ' ' || in[j] == '\n' || in[j] == '\t' || in[j] == '\r' || in[j] == '\f' || in[j] == '\v')) j--;
   if (j - i + 1 > 0) {
     return in.substr(i, j - i + 1);
   } else {
