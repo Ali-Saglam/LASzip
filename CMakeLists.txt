@@ -5,10 +5,6 @@ string(TOLOWER ${PROJECT_NAME} PROJECT_NAME_LOWER)
 
 set(ROOT_DIR "${PROJECT_SOURCE_DIR}")
 
-if (NOT CMAKE_C_STANDARD)
-    set(CMAKE_C_STANDARD 99)
-    set(CMAKE_C_STANDARD_REQUIRED ON)
-endif()
 
 if(CMAKE_GNU_COMPILER_ID OR CMAKE_Clang_COMPILER_ID)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-format-security -Wno-format-truncation")
