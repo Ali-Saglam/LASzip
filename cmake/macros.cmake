@@ -63,7 +63,9 @@ macro(LASZIP_ADD_LIBRARY _name)
         SOVERSION ${LASZIP_COMPATIBILITY_VERSION}
         CLEAN_DIRECT_OUTPUT 1
         FOLDER Libraries
+        CMAKE_CXX_STANDARD_REQUIRED ON
     )
+    target_compile_features(${_name} PRIVATE cxx_std_17)
 
     install(TARGETS ${_name}
         EXPORT LASZIPTargets
